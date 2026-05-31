@@ -67,7 +67,7 @@ jobs:
             -isystem libev \
             -I."
 
-          $CXX $SOURCES $FLAGS -lpthread -o libudp2raw.so
+          $CXX $SOURCES $FLAGS -o libudp2raw.so
 
           echo "Build succeeded, file info:"
           file libudp2raw.so

@@ -839,11 +839,15 @@ void myexit(int a) {
         printf("%s\n", RESET);
 #ifdef UDP2RAW_LINUX
     if (keep_thread_running) {
+#if !defined(__ANDROID__)
         if (pthread_cancel(keep_thread)) {
             mylog(log_warn, "pthread_cancel failed\n");
         } else {
             mylog(log_info, "pthread_cancel success\n");
         }
+#else
+        mylog(log_info, "skip pthread_cancel on Android\n");
+#endif
     }
     clear_iptables_rule();
 #endif

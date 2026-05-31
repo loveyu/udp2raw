@@ -445,7 +445,7 @@ int init_raw_socket() {
             bind_address.sll_protocol = htons(ETH_P_IPV6);
         bind_address.sll_ifindex = index;
 
-        if (bind(raw_recv_fd, (struct sockaddr *)&bind_address, sizeof(bind_address)) == -1) {
+        if (::bind(raw_recv_fd, (struct sockaddr *)&bind_address, sizeof(bind_address)) == -1) {
             mylog(log_fatal, "bind to dev [%s] failed\n", dev);
             myexit(1);
         }
@@ -2744,7 +2744,7 @@ int try_to_list_and_bind(int &fd,u32_t local_ip_uint32,int port)  //try to bind 
      temp_bind_addr.sin_port = htons(port);
      temp_bind_addr.sin_addr.s_addr = local_ip_uint32;
 
-     if (bind(fd, (struct sockaddr*)&temp_bind_addr, sizeof(temp_bind_addr)) !=0)
+     if (::bind(fd, (struct sockaddr*)&temp_bind_addr, sizeof(temp_bind_addr)) !=0)
      {
          mylog(log_debug,"bind fail\n");
          return -1;

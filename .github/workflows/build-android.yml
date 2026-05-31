@@ -3,8 +3,13 @@ name: Build Android SO
 on:
   push:
     branches: ["**"]
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -114,3 +119,10 @@ jobs:
           name: udp2raw-android-jniLibs
           path: udp2raw-android-jniLibs.zip
           retention-days: 30
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: udp2raw-android-jniLibs.zip
+          generate_release_notes: true

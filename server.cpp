@@ -650,7 +650,7 @@ int server_event_loop() {
     // temp_bind_addr.sin_port = local_addr.get_port();
     // temp_bind_addr.sin_addr.s_addr = local_addr.inner.ipv4.sin_addr.s_addr;
 
-    if (bind(bind_fd, (struct sockaddr *)&local_addr.inner, local_addr.get_len()) != 0) {
+    if (::bind(bind_fd, (struct sockaddr *)&local_addr.inner, local_addr.get_len()) != 0) {
         mylog(log_fatal, "bind fail\n");
         myexit(-1);
     }

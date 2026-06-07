@@ -8,6 +8,9 @@
 #include "common.h"
 #include "log.h"
 #include "misc.h"
+#ifdef __ANDROID__
+#include "android/udp2raw_android.h"
+#endif
 
 #include <random>
 #include <cmath>
@@ -851,7 +854,12 @@ void myexit(int a) {
     }
     clear_iptables_rule();
 #endif
+#ifdef __ANDROID__
+    // In JNI mode, throw exception instead of killing the process.
+    throw Udp2RawExitException(a);
+#else
     exit(a);
+#endif
 }
 
 vector<string> string_to_vec(const char *s, const char *sp) {

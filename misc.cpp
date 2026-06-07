@@ -1321,3 +1321,57 @@ void signal_handler(int sig) {
     about_to_exit = 1;
     // myexit(0);
 }
+
+#ifdef __ANDROID__
+/**
+ * Resets critical global state so udp2raw can be cleanly restarted via JNI.
+ * Called by the JNI bridge before each start.
+ */
+void reset_udp2raw_globals() {
+    program_mode = unset_mode;
+    raw_mode = mode_faketcp;
+    raw_ip_version = (u32_t)-1;
+    about_to_exit = 0;
+
+    log_level = log_info;
+    enable_log_color = 0;
+    enable_log_position = 0;
+
+    memset(key_string, 0, sizeof(key_string));
+    strncpy(key_string, "secret key", sizeof(key_string) - 1);
+    memset(fifo_file, 0, sizeof(fifo_file));
+
+    // Close any leftover sockets
+    if (udp_fd >= 0) { close(udp_fd); udp_fd = -1; }
+    if (bind_fd >= 0) { close(bind_fd); bind_fd = -1; }
+
+    bind_addr_used = 0;
+    force_source_ip = 0;
+    force_source_port = 0;
+    source_port = -1;
+    const_id = 0;
+    fail_time_counter = 0;
+    epoll_trigger_counter = 0;
+    debug_flag = 0;
+    simple_rule = 0;
+    keep_rule = 0;
+    auto_add_iptables_rule = 0;
+    generate_iptables_rule = 0;
+    generate_iptables_rule_add = 0;
+    retry_on_error = 0;
+    debug_resend = 0;
+    socket_buf_size = 1024 * 1024;
+    hb_mode = 1;
+    hb_len = 1200;
+    mtu_warn = 1375;
+    max_rst_to_show = 15;
+    max_rst_allowed = -1;
+    enable_dns_resolve = 0;
+    ttl_value = 64;
+    keep_thread_running = 0;
+
+    local_addr.clear();
+    remote_addr.clear();
+    source_addr.clear();
+}
+#endif  // __ANDROID__

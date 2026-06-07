@@ -6,6 +6,9 @@
 #include "lib/md5.h"
 #include "encrypt.h"
 #include "fd_manager.h"
+#ifdef __ANDROID__
+#include "android/udp2raw_android.h"
+#endif
 
 void sigpipe_cb(struct ev_loop *l, ev_signal *w, int revents) {
     mylog(log_info, "got sigpipe, ignored");
@@ -24,7 +27,12 @@ void sigint_cb(struct ev_loop *l, ev_signal *w, int revents) {
 int client_event_loop();
 int server_event_loop();
 
-int main(int argc, char *argv[]) {
+/**
+ * Core udp2raw startup logic, callable from JNI on Android.
+ * On non-Android, this is called from main().
+ * Throws Udp2RawExitException on Android (instead of exit()).
+ */
+int udp2raw_run(int argc, char *argv[]) {
     assert(sizeof(unsigned short) == 2);
     assert(sizeof(unsigned int) == 4);
     assert(sizeof(unsigned long long) == 8);
@@ -33,13 +41,19 @@ int main(int argc, char *argv[]) {
     init_ws();
 #endif
 
-    dup2(1, 2);  // redirect stderr to stdout
+#ifndef __ANDROID__
+    dup2(1, 2);  // redirect stderr to stdout (not needed in JNI mode)
+#endif
 #if defined(__MINGW32__)
     enable_log_color = 0;
+#elif defined(__ANDROID__)
+    enable_log_color = 0;  // no ANSI colors in logcat
 #endif
 
     pre_process_arg(argc, argv);
 
+#ifndef __ANDROID__
+    // Signal watchers conflict with JVM signal handling — skip on Android
     ev_signal signal_watcher_sigpipe;
     ev_signal signal_watcher_sigterm;
     ev_signal signal_watcher_sigint;
@@ -67,6 +81,14 @@ int main(int argc, char *argv[]) {
         myexit(-1);
 #endif
     }
+#else
+    // Android: server mode requires iptables which isn't available without root
+    if (program_mode != client_mode) {
+        mylog(log_fatal, "server mode is not supported in Android JNI mode\n");
+        myexit(-1);
+    }
+#endif  // !__ANDROID__
+
 #if !defined(__MINGW32__)
     if (geteuid() != 0) {
         mylog(log_warn, "root check failed, it seems like you are using a non-root account. we can try to continue, but it may fail. If you want to run udp2raw as non-root, you have to add iptables rule manually, and grant udp2raw CAP_NET_RAW capability, check README.md in repo for more info.\n");
@@ -104,3 +126,10 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+#ifndef __ANDROID__
+int main(int argc, char *argv[]) {
+    return udp2raw_run(argc, argv);
+}
+#endif
+

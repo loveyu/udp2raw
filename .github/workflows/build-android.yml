@@ -75,7 +75,7 @@ jobs:
             -isystem libev \
             -I."
 
-          $CXX $SOURCES $FLAGS -o libudp2raw.so -llog
+          $CXX $SOURCES $FLAGS -o libudp2raw.so -llog -static-libstdc++
 
           echo "Build succeeded, file info:"
           file libudp2raw.so

@@ -82,11 +82,8 @@ int udp2raw_run(int argc, char *argv[]) {
 #endif
     }
 #else
-    // Android: server mode requires iptables which isn't available without root
-    if (program_mode != client_mode) {
-        mylog(log_fatal, "server mode is not supported in Android JNI mode\n");
-        myexit(-1);
-    }
+    // Android: skip signal handlers to avoid conflicting with JVM signal handling.
+    // Server mode is allowed — it requires CAP_NET_RAW which the caller must grant.
 #endif  // !__ANDROID__
 
 #if !defined(__MINGW32__)

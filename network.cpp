@@ -382,9 +382,9 @@ int init_raw_socket() {
     // fall back to regular SOCK_DGRAM sockets — the encrypted payload is
     // identical, we just let the kernel handle IP/UDP headers.
     if (raw_mode == mode_udp) {
-        int probe = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IP));
-        if (probe < 0 && errno == EPERM) {
-            mylog(log_info, "CAP_NET_RAW unavailable, using plain UDP sockets\n");
+        int test_fd = socket(raw_ip_version, SOCK_RAW, IPPROTO_RAW);
+        if (test_fd < 0) {
+            mylog(log_info, "SOCK_RAW unavailable (%s), using plain UDP sockets\n", strerror(errno));
             g_plain_udp = 1;
             raw_send_fd = socket(raw_ip_version, SOCK_DGRAM, 0);
             if (raw_send_fd == -1) {
@@ -406,8 +406,9 @@ int init_raw_socket() {
             setnonblocking(raw_send_fd);
             setnonblocking(raw_recv_fd);
             return 0;
+        } else {
+            close(test_fd);  // raw socket available, proceed normally
         }
-        if (probe >= 0) close(probe);  // raw socket available, proceed normally
     }
 #endif
 

@@ -1,6 +1,6 @@
 #include "log.h"
-#include "log.h"
 #include "misc.h"
+#ifdef __ANDROID__
 #include <android/log.h>
 #endif
 

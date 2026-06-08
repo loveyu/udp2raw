@@ -60,7 +60,8 @@ jobs:
             server.cpp \
             lib/aes_faster_c/aes.cpp \
             lib/aes_faster_c/wrapper.cpp \
-            my_ev.cpp"
+            my_ev.cpp \
+            android/jni_bridge.cpp"
 
           FLAGS="-std=c++11 \
             -Wall -Wextra \
@@ -68,11 +69,13 @@ jobs:
             -Wno-unused-parameter \
             -Wno-missing-field-initializers \
             -O2 \
-            -fPIE -pie \
+            -shared \
+            -fPIC \
+            -DUDP2RAW_LINUX \
             -isystem libev \
             -I."
 
-          $CXX $SOURCES $FLAGS -o libudp2raw.so
+          $CXX $SOURCES $FLAGS -o libudp2raw.so -llog
 
           echo "Build succeeded, file info:"
           file libudp2raw.so

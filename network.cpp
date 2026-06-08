@@ -15,6 +15,12 @@ int raw_recv_fd = -1;
 int raw_send_fd = -1;
 u32_t link_level_header_len = 0;  // set it to 14 if SOCK_RAW is used in socket(PF_PACKET, SOCK_RAW, htons(ETH_P_IP));
 int use_tcp_dummy_socket = 0;
+#ifdef __ANDROID__
+int g_plain_udp = 0;  // set to 1 when using regular SOCK_DGRAM instead of raw sockets
+static char g_plain_recv_buf[huge_buf_len];
+static struct sockaddr_storage g_plain_from_addr;
+static socklen_t g_plain_from_len;
+#endif
 
 int seq_mode = 3;
 int max_seq_mode = 4;
@@ -371,6 +377,40 @@ extern void async_cb(struct ev_loop *loop, struct ev_async *watcher, int revents
 int init_raw_socket() {
     assert(raw_ip_version == AF_INET || raw_ip_version == AF_INET6);
 
+#ifdef __ANDROID__
+    // On Android, CAP_NET_RAW is normally unavailable.  For mode_udp we can
+    // fall back to regular SOCK_DGRAM sockets — the encrypted payload is
+    // identical, we just let the kernel handle IP/UDP headers.
+    if (raw_mode == mode_udp) {
+        int probe = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_IP));
+        if (probe < 0 && errno == EPERM) {
+            mylog(log_info, "CAP_NET_RAW unavailable, using plain UDP sockets\n");
+            g_plain_udp = 1;
+            raw_send_fd = socket(raw_ip_version, SOCK_DGRAM, 0);
+            if (raw_send_fd == -1) {
+                mylog(log_fatal, "Failed to create plain send socket: %s\n", strerror(errno));
+                myexit(1);
+            }
+            raw_recv_fd = socket(raw_ip_version, SOCK_DGRAM, 0);
+            if (raw_recv_fd == -1) {
+                mylog(log_fatal, "Failed to create plain recv socket: %s\n", strerror(errno));
+                myexit(1);
+            }
+            if (force_socket_buf) {
+                setsockopt(raw_send_fd, SOL_SOCKET, SO_SNDBUFFORCE, &socket_buf_size, sizeof(socket_buf_size));
+                setsockopt(raw_recv_fd, SOL_SOCKET, SO_RCVBUFFORCE, &socket_buf_size, sizeof(socket_buf_size));
+            } else {
+                setsockopt(raw_send_fd, SOL_SOCKET, SO_SNDBUF, &socket_buf_size, sizeof(socket_buf_size));
+                setsockopt(raw_recv_fd, SOL_SOCKET, SO_RCVBUF, &socket_buf_size, sizeof(socket_buf_size));
+            }
+            setnonblocking(raw_send_fd);
+            setnonblocking(raw_recv_fd);
+            return 0;
+        }
+        if (probe >= 0) close(probe);  // raw socket available, proceed normally
+    }
+#endif
+
     g_ip_id_counter = get_true_random_number() % 65535;
     if (lower_level == 0) {
         raw_send_fd = socket(raw_ip_version, SOCK_RAW, IPPROTO_RAW);  // IPPROTO_TCP??
@@ -666,6 +706,12 @@ setnonblocking(raw_recv_fd);*/
 void init_filter(int port) {
     sock_fprog bpf;
     assert(raw_ip_version == AF_INET || raw_ip_version == AF_INET6);
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        filter_port = port;
+        return;  // BPF filter not applicable to regular sockets
+    }
+#endif
     if (raw_mode == mode_faketcp || raw_mode == mode_udp) {
         filter_port = port;
     }
@@ -1245,6 +1291,24 @@ int pre_recv_raw_packet() {
 #ifdef UDP2RAW_LINUX
     assert(g_packet_buf_cnt == 0);
 
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        g_plain_from_len = sizeof(g_plain_from_addr);
+        g_packet_buf_len = recvfrom(raw_recv_fd, g_packet_buf, huge_data_len + 1, 0,
+                                    (sockaddr *)&g_plain_from_addr, &g_plain_from_len);
+        if (g_packet_buf_len < 0) {
+            mylog(log_trace, "recv_len %d\n", g_packet_buf_len);
+            return -1;
+        }
+        if (g_packet_buf_len >= max_data_len + 1) {
+            mylog(log_warn, "huge packet, data_len %d > %d(max_data_len) dropped\n", g_packet_buf_len, max_data_len);
+            return -1;
+        }
+        g_packet_buf_cnt++;
+        return 0;
+    }
+#endif
+
     g_sockaddr_len = sizeof(g_sockaddr.ll);
     g_packet_buf_len = recvfrom(raw_recv_fd, g_packet_buf, huge_data_len + 1, 0, (sockaddr *)&g_sockaddr, &g_sockaddr_len);
     // assert(g_sockaddr_len==sizeof(g_sockaddr.ll)); //g_sockaddr_len=18, sizeof(g_sockaddr.ll)=20, why its not equal? maybe its bc sll_halen is 6?
@@ -1291,6 +1355,14 @@ int recv_raw_packet(char *&packet, int &len, int peek) {
     assert(g_packet_buf_cnt == 1);
     if (!peek)
         g_packet_buf_cnt--;
+
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        packet = g_packet_buf;
+        len = g_packet_buf_len;
+        return 0;
+    }
+#endif
 
     if (g_packet_buf_len < int(link_level_header_len)) {
         mylog(log_trace, "packet len %d shorter than link_level_header_len %d\n", g_packet_buf_len, int(link_level_header_len));
@@ -1562,6 +1634,32 @@ int send_raw_icmp(raw_info_t &raw_info, const char *payload, int payloadlen) {
 int send_raw_udp(raw_info_t &raw_info, const char *payload, int payloadlen) {
     const packet_info_t &send_info = raw_info.send_info;
     const packet_info_t &recv_info = raw_info.recv_info;
+
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        struct sockaddr_storage to_addr;
+        memset(&to_addr, 0, sizeof(to_addr));
+        if (raw_ip_version == AF_INET) {
+            struct sockaddr_in *addr4 = (struct sockaddr_in *)&to_addr;
+            addr4->sin_family = AF_INET;
+            addr4->sin_addr.s_addr = send_info.new_dst_ip.v4;
+            addr4->sin_port = htons(send_info.dst_port);
+        } else {
+            struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&to_addr;
+            addr6->sin6_family = AF_INET6;
+            addr6->sin6_addr = send_info.new_dst_ip.v6;
+            addr6->sin6_port = htons(send_info.dst_port);
+        }
+        int n = sendto(raw_send_fd, payload, payloadlen, 0,
+                       (struct sockaddr *)&to_addr,
+                       raw_ip_version == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
+        if (n != payloadlen) {
+            mylog(log_trace, "plain sendto returned %d, errno=%s\n", n, strerror(errno));
+            return -1;
+        }
+        return 0;
+    }
+#endif
 
     char send_raw_udp_buf[buf_len];
 
@@ -2023,6 +2121,30 @@ int recv_raw_udp(raw_info_t &raw_info, char *&payload, int &payloadlen) {
     // static char recv_raw_udp_buf[buf_len];
     char *ip_payload;
     int ip_payloadlen;
+
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        // With plain sockets the kernel already stripped IP + UDP headers.
+        // recv_raw_packet returns the UDP payload directly.
+        char *data;
+        int data_len;
+        if (recv_raw_packet(data, data_len, raw_info.peek) != 0) return -1;
+        // Populate recv_info from the sockaddr saved in pre_recv_raw_packet.
+        if (raw_ip_version == AF_INET) {
+            struct sockaddr_in *from4 = (struct sockaddr_in *)&g_plain_from_addr;
+            recv_info.new_src_ip.v4 = from4->sin_addr.s_addr;
+            recv_info.src_port = ntohs(from4->sin_port);
+        } else {
+            struct sockaddr_in6 *from6 = (struct sockaddr_in6 *)&g_plain_from_addr;
+            recv_info.new_src_ip.v6 = from6->sin6_addr;
+            recv_info.src_port = ntohs(from6->sin6_port);
+        }
+        recv_info.protocol = IPPROTO_UDP;
+        payload = data;
+        payloadlen = data_len;
+        return 0;
+    }
+#endif
 
     if (recv_raw_ip(raw_info, ip_payload, ip_payloadlen) != 0) {
         mylog(log_debug, "recv_raw_ip error\n");

@@ -640,7 +640,15 @@ int server_event_loop() {
         bind_fd = socket(local_addr.get_type(), SOCK_STREAM, 0);
     } else if (raw_mode == mode_udp || raw_mode == mode_icmp)  // bind an adress to avoid collision,for icmp,there is no port,just bind a udp port
     {
-        bind_fd = socket(local_addr.get_type(), SOCK_DGRAM, 0);
+#ifdef __ANDROID__
+        if (g_plain_udp) {
+            // raw_recv_fd is already a SOCK_DGRAM — bind it directly to local_addr.
+            // No separate bind_fd needed; raw_recv_fd serves as both bind and recv.
+        } else
+#endif
+        {
+            bind_fd = socket(local_addr.get_type(), SOCK_DGRAM, 0);
+        }
     }
 
     // struct sockaddr_in temp_bind_addr={0};
@@ -650,9 +658,20 @@ int server_event_loop() {
     // temp_bind_addr.sin_port = local_addr.get_port();
     // temp_bind_addr.sin_addr.s_addr = local_addr.inner.ipv4.sin_addr.s_addr;
 
-    if (::bind(bind_fd, (struct sockaddr *)&local_addr.inner, local_addr.get_len()) != 0) {
-        mylog(log_fatal, "bind fail\n");
-        myexit(-1);
+#ifdef __ANDROID__
+    if (g_plain_udp && (raw_mode == mode_udp || raw_mode == mode_icmp)) {
+        // Bind raw_recv_fd (the plain UDP socket) to local_addr
+        if (::bind(raw_recv_fd, (struct sockaddr *)&local_addr.inner, local_addr.get_len()) != 0) {
+            mylog(log_fatal, "bind fail: %s\n", strerror(errno));
+            myexit(-1);
+        }
+    } else
+#endif
+    {
+        if (::bind(bind_fd, (struct sockaddr *)&local_addr.inner, local_addr.get_len()) != 0) {
+            mylog(log_fatal, "bind fail\n");
+            myexit(-1);
+        }
     }
 
     if (raw_mode == mode_faketcp) {

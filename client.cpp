@@ -141,6 +141,15 @@ int client_on_timer(conn_info_t &conn_info)  // for client. called when a timer 
             send_info.src_port = source_port;
         }
 
+#ifdef __ANDROID__
+        if (g_plain_udp && bind_fd != -1) {
+            // In plain-UDP mode raw_recv_fd must be the bound socket so the
+            // ev_io watcher receives data on the correct port.
+            if (raw_recv_fd != -1 && raw_recv_fd != bind_fd) close(raw_recv_fd);
+            raw_recv_fd = bind_fd;
+        }
+#endif
+
         if (raw_mode == mode_icmp) {
             send_info.dst_port = send_info.src_port;
         }

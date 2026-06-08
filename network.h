@@ -11,6 +11,9 @@
 extern int raw_recv_fd;
 extern int raw_send_fd;
 extern int use_tcp_dummy_socket;
+#ifdef __ANDROID__
+extern int g_plain_udp;
+#endif
 extern int seq_mode;
 extern int max_seq_mode;
 extern int filter_port;

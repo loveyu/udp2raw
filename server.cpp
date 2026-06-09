@@ -665,6 +665,7 @@ int server_event_loop() {
             mylog(log_fatal, "bind fail: %s\n", strerror(errno));
             myexit(-1);
         }
+        mylog(log_info, "plain UDP bound recv_fd=%d to %s\n", raw_recv_fd, local_addr.get_str());
     } else
 #endif
     {

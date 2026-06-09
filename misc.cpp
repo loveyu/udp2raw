@@ -337,10 +337,10 @@ void process_arg(int argc, char *argv[])  // process all options
         }
     }
 
-    mylog(log_info, "argc=%d ", argc);
+    mylog(log_info, "argc=%d", argc);
 
     for (i = 0; i < argc; i++) {
-        log_bare(log_info, "%s ", argv[i]);
+        if (argv[i]) log_bare(log_info, " %s", argv[i]);
     }
     log_bare(log_info, "\n");
 

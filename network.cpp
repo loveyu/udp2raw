@@ -405,6 +405,7 @@ int init_raw_socket() {
             }
             setnonblocking(raw_send_fd);
             setnonblocking(raw_recv_fd);
+            mylog(log_info, "plain UDP sockets created, send_fd=%d, recv_fd=%d\n", raw_send_fd, raw_recv_fd);
             return 0;
         } else {
             close(test_fd);  // raw socket available, proceed normally
@@ -1298,13 +1299,22 @@ int pre_recv_raw_packet() {
         g_packet_buf_len = recvfrom(raw_recv_fd, g_packet_buf, huge_data_len + 1, 0,
                                     (sockaddr *)&g_plain_from_addr, &g_plain_from_len);
         if (g_packet_buf_len < 0) {
-            mylog(log_trace, "recv_len %d\n", g_packet_buf_len);
+            mylog(log_trace, "plain recv error: %s\n", strerror(errno));
             return -1;
         }
         if (g_packet_buf_len >= max_data_len + 1) {
             mylog(log_warn, "huge packet, data_len %d > %d(max_data_len) dropped\n", g_packet_buf_len, max_data_len);
             return -1;
         }
+        char from_str[max_addr_len];
+        if (raw_ip_version == AF_INET) {
+            auto *f = (sockaddr_in *)&g_plain_from_addr;
+            sprintf(from_str, "%s:%d", my_ntoa(f->sin_addr.s_addr), ntohs(f->sin_port));
+        } else {
+            auto *f = (sockaddr_in6 *)&g_plain_from_addr;
+            sprintf(from_str, "[ipv6]:%d", ntohs(f->sin6_port));
+        }
+        mylog(log_info, "plain recv %d bytes from %s\n", g_packet_buf_len, from_str);
         g_packet_buf_cnt++;
         return 0;
     }
@@ -1547,6 +1557,8 @@ int peek_raw(raw_info_t &raw_info) {
             recv_info.src_port = ntohs(from6->sin6_port);
         }
         recv_info.protocol = IPPROTO_UDP;
+        mylog(log_info, "plain peek from %s:%d, %d bytes\n",
+              recv_info.new_src_ip.get_str1(), recv_info.src_port, data_len);
         return 0;
     }
 #endif
@@ -1677,9 +1689,12 @@ int send_raw_udp(raw_info_t &raw_info, const char *payload, int payloadlen) {
                        (struct sockaddr *)&to_addr,
                        raw_ip_version == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
         if (n != payloadlen) {
-            mylog(log_trace, "plain sendto returned %d, errno=%s\n", n, strerror(errno));
+            mylog(log_warn, "plain sendto %d/%d to %s:%d failed: %s\n",
+                  n, payloadlen, send_info.new_dst_ip.get_str2(), send_info.dst_port, strerror(errno));
             return -1;
         }
+        mylog(log_info, "plain send %d bytes to %s:%d\n",
+              payloadlen, send_info.new_dst_ip.get_str2(), send_info.dst_port);
         return 0;
     }
 #endif
@@ -2163,6 +2178,8 @@ int recv_raw_udp(raw_info_t &raw_info, char *&payload, int &payloadlen) {
             recv_info.src_port = ntohs(from6->sin6_port);
         }
         recv_info.protocol = IPPROTO_UDP;
+        mylog(log_info, "plain recv_udp from %s:%d, %d bytes\n",
+              recv_info.new_src_ip.get_str1(), recv_info.src_port, data_len);
         payload = data;
         payloadlen = data_len;
         return 0;

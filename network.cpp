@@ -1671,7 +1671,9 @@ int send_raw_udp(raw_info_t &raw_info, const char *payload, int payloadlen) {
             addr6->sin6_addr = send_info.new_dst_ip.v6;
             addr6->sin6_port = htons(send_info.dst_port);
         }
-        int n = sendto(raw_send_fd, payload, payloadlen, 0,
+        // Use raw_recv_fd (bound to the correct port) for sending so the
+        // kernel uses the expected source port instead of a random one.
+        int n = sendto(raw_recv_fd, payload, payloadlen, 0,
                        (struct sockaddr *)&to_addr,
                        raw_ip_version == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
         if (n != payloadlen) {

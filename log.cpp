@@ -52,9 +52,10 @@ void log0(const char* file, const char* function, int line, int level, const cha
         case log_debug: priority = ANDROID_LOG_DEBUG; break;
         default:        priority = ANDROID_LOG_VERBOSE; break;
     }
-    __android_log_vprint(priority, "udp2raw", str, vlist);
-    // Also write to log file if set
     if (g_log_file) {
+        va_list vlist2;
+        va_copy(vlist2, vlist);
+        __android_log_vprint(priority, "udp2raw", str, vlist);
         time_t timer;
         char tbuf[100];
         struct tm* tm_info;
@@ -62,8 +63,11 @@ void log0(const char* file, const char* function, int line, int level, const cha
         tm_info = localtime(&timer);
         strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", tm_info);
         fprintf(g_log_file, "[%s][%s] ", tbuf, log_text[level]);
-        vfprintf(g_log_file, str, vlist);
+        vfprintf(g_log_file, str, vlist2);
+        va_end(vlist2);
         fflush(g_log_file);
+    } else {
+        __android_log_vprint(priority, "udp2raw", str, vlist);
     }
 #else
     time_t timer;
@@ -111,10 +115,15 @@ void log_bare(int level, const char* str, ...) {
         case log_info:  priority = ANDROID_LOG_INFO;  break;
         default:        priority = ANDROID_LOG_DEBUG; break;
     }
-    __android_log_vprint(priority, "udp2raw", str, vlist);
     if (g_log_file) {
-        vfprintf(g_log_file, str, vlist);
+        va_list vlist2;
+        va_copy(vlist2, vlist);
+        __android_log_vprint(priority, "udp2raw", str, vlist);
+        vfprintf(g_log_file, str, vlist2);
+        va_end(vlist2);
         fflush(g_log_file);
+    } else {
+        __android_log_vprint(priority, "udp2raw", str, vlist);
     }
 #else
     if (enable_log_color)

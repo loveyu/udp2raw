@@ -19,6 +19,12 @@ extern pcap_t *pcap_handle;
 extern int pcap_captured_full_len;
 #endif
 
+#ifdef UDP2RAW_LINUX
+static struct ev_io g_raw_recv_watcher;
+static int g_raw_recv_watcher_inited = 0;
+static void raw_recv_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+#endif
+
 int client_on_timer(conn_info_t &conn_info)  // for client. called when a timer is ready in epoll
 {
     packet_info_t &send_info = conn_info.raw_info.send_info;
@@ -147,6 +153,15 @@ int client_on_timer(conn_info_t &conn_info)  // for client. called when a timer 
             // ev_io watcher receives data on the correct port.
             if (raw_recv_fd != -1 && raw_recv_fd != bind_fd) close(raw_recv_fd);
             raw_recv_fd = bind_fd;
+#ifdef UDP2RAW_LINUX
+            // Re-initialize the watcher so it polls the new fd.
+            if (g_raw_recv_watcher_inited) {
+                struct ev_loop *loop = ev_default_loop(0);
+                ev_io_stop(loop, &g_raw_recv_watcher);
+                ev_io_init(&g_raw_recv_watcher, raw_recv_cb, raw_recv_fd, EV_READ);
+                ev_io_start(loop, &g_raw_recv_watcher);
+            }
+#endif
         }
 #endif
 
@@ -860,11 +875,10 @@ int client_event_loop() {
     // }
 
 #ifdef UDP2RAW_LINUX
-    struct ev_io raw_recv_watcher;
-
-    raw_recv_watcher.data = &conn_info;
-    ev_io_init(&raw_recv_watcher, raw_recv_cb, raw_recv_fd, EV_READ);
-    ev_io_start(loop, &raw_recv_watcher);
+    g_raw_recv_watcher.data = &conn_info;
+    ev_io_init(&g_raw_recv_watcher, raw_recv_cb, raw_recv_fd, EV_READ);
+    ev_io_start(loop, &g_raw_recv_watcher);
+    g_raw_recv_watcher_inited = 1;
 #endif
 
 #ifdef UDP2RAW_MP

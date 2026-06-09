@@ -246,6 +246,12 @@ int process_log_level(int argc, char *argv[])  // process  --log-level and --dis
 }
 void process_arg(int argc, char *argv[])  // process all options
 {
+    if (argc < 2 || argv == nullptr || argv[0] == nullptr) {
+        mylog(log_fatal, "no arguments provided\n");
+        print_help();
+        myexit(-1);
+    }
+
     int i, j, k, opt;
 
     int option_index = 0;

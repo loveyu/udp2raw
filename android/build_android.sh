@@ -21,9 +21,18 @@ NDK_PATH="${1:-${ANDROID_NDK_HOME:-${ANDROID_NDK:-}}}"
 API_LEVEL="${2:-33}"
 OUTPUT_DIR="${3:-${SCRIPT_DIR}/output/jniLibs}"
 
+# Auto-detect NDK from ~/Android/Sdk/ndk/ if not set
+if [[ -z "$NDK_PATH" ]]; then
+    HOME_SDK="$HOME/Android/Sdk"
+    if [[ -d "$HOME_SDK/ndk" ]]; then
+        NDK_PATH="$(ls -d "$HOME_SDK/ndk/"* 2>/dev/null | sort -V | tail -1)"
+    fi
+fi
+
 if [[ -z "$NDK_PATH" ]]; then
     echo "ERROR: Android NDK not found."
-    echo "  Set ANDROID_NDK_HOME, or pass the NDK path as first argument."
+    echo "  Set ANDROID_NDK_HOME, pass the NDK path as first argument,"
+    echo "  or install NDK under ~/Android/Sdk/ndk/."
     exit 1
 fi
 

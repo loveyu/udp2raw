@@ -1531,6 +1531,26 @@ int peek_raw(raw_info_t &raw_info) {
 
     char *payload;
     int payload_len;
+
+#ifdef __ANDROID__
+    if (g_plain_udp) {
+        char *data;
+        int data_len;
+        if (recv_raw_packet(data, data_len, raw_info.peek) != 0) return -1;
+        if (raw_ip_version == AF_INET) {
+            struct sockaddr_in *from4 = (struct sockaddr_in *)&g_plain_from_addr;
+            recv_info.new_src_ip.v4 = from4->sin_addr.s_addr;
+            recv_info.src_port = ntohs(from4->sin_port);
+        } else {
+            struct sockaddr_in6 *from6 = (struct sockaddr_in6 *)&g_plain_from_addr;
+            recv_info.new_src_ip.v6 = from6->sin6_addr;
+            recv_info.src_port = ntohs(from6->sin6_port);
+        }
+        recv_info.protocol = IPPROTO_UDP;
+        return 0;
+    }
+#endif
+
     if (recv_raw_ip(raw_info, payload, payload_len) != 0)
         return -1;
     // mylog(log_info,"protocol %d\n",iph->protocol);
